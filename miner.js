@@ -25,6 +25,7 @@ class KaleidoMiningBot {
             efficiency: 1.4,
             powerUsage: 120
         };
+        this.sessionFile = `session_${wallet}.json`;
         
         this.api = axios.create({
             baseURL: 'https://kaleidofinance.xyz/api/testnet',
@@ -34,6 +35,34 @@ class KaleidoMiningBot {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'
             }
         });
+    }
+
+    async loadSession() {
+        try {
+            const data = await fs.readFile(this.sessionFile, 'utf8');
+            const session = JSON.parse(data);
+            this.miningState.startTime = session.startTime;
+            this.currentEarnings = session.earnings;
+            this.referralBonus = session.referralBonus;
+            console.log(chalk.green(`[Wallet ${this.botIndex}] Previous session loaded successfully`));
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    async saveSession() {
+        const sessionData = {
+            startTime: this.miningState.startTime,
+            earnings: this.currentEarnings,
+            referralBonus: this.referralBonus
+        };
+        
+        try {
+            await fs.writeFile(this.sessionFile, JSON.stringify(sessionData, null, 2));
+        } catch (error) {
+            console.error(chalk.red(`[Wallet ${this.botIndex}] Failed to save session:`, error.message));
+        }
     }
 
     async initialize() {
@@ -47,21 +76,26 @@ class KaleidoMiningBot {
             if (!regResponse.data.isRegistered) {
                 throw new Error('Wallet not registered');
             }
+
+            // 2. Try to load previous session
+            const hasSession = await this.loadSession();
             
-            // 2. Initialize mining parameters from server response
-            this.referralBonus = regResponse.data.userData.referralBonus;
-            this.currentEarnings = {
-                total: regResponse.data.userData.referralBonus || 0,
-                pending: 0,
-                paid: 0
-            };
+            if (!hasSession) {
+                // Only initialize new values if no previous session exists
+                this.referralBonus = regResponse.data.userData.referralBonus;
+                this.currentEarnings = {
+                    total: regResponse.data.userData.referralBonus || 0,
+                    pending: 0,
+                    paid: 0
+                };
+                this.miningState.startTime = Date.now();
+            }
 
             // 3. Start mining session
-            this.miningState.startTime = Date.now();
             this.miningState.isActive = true;
             
-            console.log(chalk.green(`[Wallet ${this.botIndex}] Mining initialized successfully`));
-            this.startMiningLoop();
+            console.log(chalk.green(`[Wallet ${this.botIndex}] Mining ${hasSession ? 'resumed' : 'initialized'} successfully`));
+            await this.startMiningLoop();
 
         } catch (error) {
             console.error(chalk.red(`[Wallet ${this.botIndex}] Initialization failed:`), error.message);
@@ -109,6 +143,7 @@ class KaleidoMiningBot {
                     paid: finalUpdate ? this.currentEarnings.paid + newEarnings : this.currentEarnings.paid
                 };
                 
+                await this.saveSession();
                 this.logStatus(finalUpdate);
             }
         } catch (error) {
@@ -142,19 +177,29 @@ class KaleidoMiningBot {
     async stop() {
         this.miningState.isActive = false;
         await this.updateBalance(true);
+        await this.saveSession();
         return this.currentEarnings.paid;
     }
 }
 
 export class MiningCoordinator {
+    static instance = null;
+    
     constructor() {
+        // Singleton pattern to prevent multiple instances
+        if (MiningCoordinator.instance) {
+            return MiningCoordinator.instance;
+        }
+        MiningCoordinator.instance = this;
+        
         this.bots = [];
         this.totalPaid = 0;
+        this.isRunning = false;
     }
 
     async loadWallets() {
         try {
-          const __dirname = dirname(fileURLToPath(import.meta.url));
+            const __dirname = dirname(fileURLToPath(import.meta.url));
             const data = await readFile(join(__dirname, 'wallets.txt'), 'utf8');
             return data.split('\n')
                 .map(line => line.trim())
@@ -166,6 +211,13 @@ export class MiningCoordinator {
     }
 
     async start() {
+        // Prevent multiple starts
+        if (this.isRunning) {
+            console.log(chalk.yellow('Mining coordinator is already running'));
+            return;
+        }
+        
+        this.isRunning = true;
         displayBanner();
         const wallets = await this.loadWallets();
         
@@ -198,6 +250,3 @@ export class MiningCoordinator {
         });
     }
 }
-
-// Start mining operation
-new MiningCoordinator().start().catch(console.error);
