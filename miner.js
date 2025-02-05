@@ -1,9 +1,11 @@
 // miner.js
-const axios = require('axios');
-const chalk = require('chalk');
-const fs = require('fs').promises;
-const path = require('path');
-const displayBanner = require('./banner');
+import axios from 'axios'
+import chalk from 'chalk'
+import * as fs from 'fs/promises';
+import { readFile } from 'fs/promises';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+import {displayBanner} from './banner.js';
 
 class KaleidoMiningBot {
     constructor(wallet, botIndex) {
@@ -144,7 +146,7 @@ class KaleidoMiningBot {
     }
 }
 
-class MiningCoordinator {
+export class MiningCoordinator {
     constructor() {
         this.bots = [];
         this.totalPaid = 0;
@@ -152,7 +154,8 @@ class MiningCoordinator {
 
     async loadWallets() {
         try {
-            const data = await fs.readFile(path.join(__dirname, 'wallets.txt'), 'utf8');
+          const __dirname = dirname(fileURLToPath(import.meta.url));
+            const data = await readFile(join(__dirname, 'wallets.txt'), 'utf8');
             return data.split('\n')
                 .map(line => line.trim())
                 .filter(line => line.startsWith('0x'));

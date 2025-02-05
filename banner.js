@@ -1,7 +1,7 @@
 // banner.js
-const chalk = require('chalk');
+import chalk from 'chalk';
 
-function displayBanner() {
+export function displayBanner() {
     console.log(chalk.cyan(`
         █████╗ ██╗██████╗ ██████╗ ██████╗  ██████╗ ██████╗ 
        ██╔══██╗██║██╔══██╗██╔══██╗██╔══██╗██╔═══██╗██╔══██╗
@@ -20,5 +20,3 @@ function displayBanner() {
      📢  ${chalk.blue('Telegram Channel: https://t.me/AirdropInsiderID')}
     `));
 }
-
-module.exports = displayBanner;
